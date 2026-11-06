@@ -1,2 +1,2 @@
-file,pelanggan,pembayaran,pengguna,pesanan,sesi
-audit.sql,RU,R,R,RU,D
+file,keranjang,pelanggan,produk
+campuran_error.sql,D,R,U
