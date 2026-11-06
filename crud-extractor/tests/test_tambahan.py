@@ -10,7 +10,14 @@ from crud import ast_nodes as ast
 from crud.lexer import tokenize, LexError, TokenType
 from crud.parser import parse_sql
 from crud.resolver import Resolver
+from crud.parser import parse_sql
+from crud.analyzer import analyze_statement
 
+def test_subquery_di_update_hanya_dibaca():
+    st = parse_sql(
+        "UPDATE a SET x = (SELECT y FROM b) WHERE id IN (SELECT id FROM c)"
+    ).statements[0]
+    assert analyze_statement(st) == {"a": {"U"}, "b": {"R"}, "c": {"R"}}
 
 def resolve(sql):
     """Parse SQL lalu jalankan Resolver."""
