@@ -6,6 +6,7 @@ Aturan lengkap: SPESIFIKASI.md bagian 4.
 """
 from dataclasses import dataclass
 
+
 from . import ast_nodes as ast
 
 
@@ -85,15 +86,15 @@ class Resolver:
             self._declare(source.alias, None, source.line)
 
     def _lookup(self, name: str) -> ScopeEntry | None:
-        """Cari nama di rantai scope."""
-        chain = []
+        """Cari nama dari scope terdalam ke scope terluar."""
         scope = self.scope
+
         while scope is not None:
-            chain.append(scope)
-            scope = scope.parent
-        for scope in reversed(chain):
             if name in scope.entries:
                 return scope.entries[name]
+
+            scope = scope.parent
+
         return None
 
     # ---- statement ------------------------------------------------------
@@ -139,46 +140,84 @@ class Resolver:
         self._push()
         self._declare_source(dele.table)
         self._expr(dele.where)
+        self._pop()
 
-    # ---- ekspresi -------------------------------------------------------
+       # ---- ekspresi -------------------------------------------------------
     def _expr(self, expr) -> None:
         if expr is None:
             return
+
         if isinstance(expr, ast.ColumnRef):
             self._column(expr)
+
         elif isinstance(expr, ast.BinaryOp):
             self._expr(expr.left)
             self._expr(expr.right)
+
         elif isinstance(expr, ast.UnaryOp):
             self._expr(expr.operand)
+
         elif isinstance(expr, ast.InExpr):
             self._expr(expr.expr)
+
             for value in expr.values or []:
                 self._expr(value)
+
             if expr.query is not None:
                 self._select(expr.query)
+
         elif isinstance(expr, ast.Between):
             self._expr(expr.expr)
             self._expr(expr.low)
             self._expr(expr.high)
+
         elif isinstance(expr, ast.IsNull):
             self._expr(expr.expr)
+
         elif isinstance(expr, (ast.Exists, ast.Subquery)):
             self._select(expr.query)
+
         elif isinstance(expr, ast.FunctionCall):
             for arg in expr.args:
                 self._expr(arg)
 
     def _column(self, col: ast.ColumnRef) -> None:
+        # Kolom dengan qualifier, misalnya p.nama.
         if col.qualifier is not None:
             entry = self._lookup(col.qualifier)
+
             if entry is None:
-                self._error(f"alias '{col.qualifier}' tidak terdefinisi", col.line)
+                self._error(
+                    f"alias '{col.qualifier}' tidak terdefinisi",
+                    col.line
+                )
             else:
                 col.resolved = _target_of(entry)
+
             return
-        # TODO(T2): kolom tanpa qualifier (SPESIFIKASI.md bagian 4.3).
-        #   - tepat satu tabel di scope terdalam -> isi col.resolved
-        #   - lebih dari satu tabel              -> warning "ambigu tanpa skema"
-        #   - tidak ada tabel                    -> warning
-        pass
+
+        # Kolom tanpa qualifier, misalnya SELECT nama.
+        if self.scope is None:
+            self._warning(
+                f"kolom '{col.name}' tidak memiliki tabel sumber",
+                col.line
+            )
+            return
+
+        # Periksa sumber hanya pada scope terdalam.
+        entries = list(self.scope.entries.values())
+
+        if len(entries) == 1:
+            col.resolved = _target_of(entries[0])
+
+        elif len(entries) > 1:
+            self._warning(
+                f"kolom '{col.name}' ambigu tanpa skema",
+                col.line
+            )
+
+        else:
+            self._warning(
+                f"kolom '{col.name}' tidak memiliki tabel sumber",
+                col.line
+            )
