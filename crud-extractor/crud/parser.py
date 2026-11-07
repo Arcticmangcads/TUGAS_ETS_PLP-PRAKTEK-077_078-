@@ -91,7 +91,8 @@ class Parser:
         # Panic mode (Crafting Interpreters bab 6): buang token sampai
         # titik aman, lalu lanjutkan parsing.
         while not self._at_end():
-            self._advance()
+            if self._advance().type == T.SEMICOLON:
+                return
 
     def _statement(self):
         if self._check_kw("SELECT"):
@@ -176,6 +177,7 @@ class Parser:
             kind = "INNER"
         elif self._match_kw("LEFT"):
             kind = "LEFT"
+            self._match_kw("OUTER")
         self._expect_kw("JOIN")
         source = self._table_ref()
         self._expect_kw("ON")
@@ -210,8 +212,8 @@ class Parser:
                 rows.append(self._value_row())
             return ast.Insert(table, columns, rows, None, line=start.line)
         if self._check_kw("SELECT"):
-            # TODO(T1): dukung INSERT INTO ... SELECT ... (SPESIFIKASI.md bagian 3 dan 5).
-            raise ParseError("INSERT ... SELECT belum didukung", self._peek())
+               query = self._select()
+               return ast.Insert(table, columns, [], query, line=start.line)
         raise ParseError("diharapkan VALUES atau SELECT", self._peek())
 
     def _value_row(self) -> list:
@@ -246,12 +248,20 @@ class Parser:
 
     # ---- ekspresi (dari presedensi terendah ke tertinggi) ---------------
     def _expr(self):
-        return self._logical()
+        return self._or()
 
-    def _logical(self):
-        # OR dan AND: operator logika biner, asosiatif kiri.
+    def _or(self):
+        # or_expr = and_expr { "OR" and_expr }
+        left = self._and()
+        while self._check_kw("OR"):
+            op = self._advance().value
+            left = ast.BinaryOp(left, op, self._and())
+        return left
+
+    def _and(self):
+        # and_expr = not_expr { "AND" not_expr }
         left = self._not()
-        while self._check_kw("AND", "OR"):
+        while self._check_kw("AND"):
             op = self._advance().value
             left = ast.BinaryOp(left, op, self._not())
         return left

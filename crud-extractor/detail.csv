@@ -1,0 +1,4 @@
+file,baris,jenis,tabel,operasi
+campuran_error.sql,2,SELECT,pelanggan,R
+campuran_error.sql,6,UPDATE,produk,U
+campuran_error.sql,8,DELETE,keranjang,D

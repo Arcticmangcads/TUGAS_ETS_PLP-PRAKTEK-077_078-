@@ -1,0 +1,3 @@
+SELEC x;
+SELECT a FROM t;
+DELETE FROM q;

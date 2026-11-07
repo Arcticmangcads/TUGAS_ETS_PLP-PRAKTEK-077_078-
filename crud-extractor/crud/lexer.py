@@ -107,8 +107,8 @@ class Lexer:
                 self._advance()
             return
         if ch == "/" and self._peek() == "*":
-            # TODO(T3): dukung komentar blok /* ... */ (SPESIFIKASI.md bagian 2.3).
-            raise LexError("komentar blok belum didukung", line, col)
+            self._block_comment(line, col)
+            return
         if ch in _SINGLE:
             self._add(_SINGLE[ch], ch, line, col)
             return
@@ -116,7 +116,12 @@ class Lexer:
             self._add(TokenType.OP, ch, line, col)
             return
         if ch == "<":
-            op = "<=" if self._match("=") else "<"
+            if self._match("="):
+                op = "<="
+            elif self._match(">"):
+                op = "<>"
+            else:
+                op = "<"
             self._add(TokenType.OP, op, line, col)
             return
         if ch == ">":
@@ -150,6 +155,22 @@ class Lexer:
             return
         raise LexError(f"karakter tidak dikenal {ch!r}", line, col)
 
+    def _block_comment(self, line: int, col: int) -> None:
+        # Lewati karakter '*' pembuka komentar.
+        self._advance()
+
+        # Baca isi komentar sampai menemukan penutup '*/'.
+        while not self._at_end():
+            if self._peek() == "*" and self._peek(1) == "/":
+                self._advance()
+                self._advance()
+                return
+
+            self._advance()
+
+        # Jika komentar tidak memiliki penutup.
+        raise LexError("komentar blok tidak ditutup", line, col)
+
     def _string(self, line: int, col: int) -> None:
         chars: list[str] = []
         while True:
@@ -157,6 +178,10 @@ class Lexer:
                 raise LexError("string tidak ditutup", line, col)
             ch = self._advance()
             if ch == "'":
+                if self._peek() == "'":
+                    self._advance()
+                    chars.append("'")
+                    continue
                 break
             chars.append(ch)
         self._add(TokenType.STRING, "".join(chars), line, col)
@@ -176,11 +201,10 @@ class Lexer:
         while self._peek().isalnum() or self._peek() == "_":
             self._advance()
         text = self.src[start:self.pos]
-        if text in KEYWORDS:
-            self._add(TokenType.KEYWORD, text, line, col)
+        if text.upper() in KEYWORDS:
+            self._add(TokenType.KEYWORD, text.upper(), line, col)
         else:
             self._add(TokenType.IDENT, text, line, col)
-
 
 def tokenize(source: str) -> list[Token]:
     return Lexer(source).tokenize()
